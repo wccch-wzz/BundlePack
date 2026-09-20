@@ -1,0 +1,15 @@
+--- a/ZalithLauncher/build.gradle.kts
++++ b/ZalithLauncher/build.gradle.kts
+@@ -120,6 +120,12 @@
+         }
+     }
+ 
++    androidResources {
++        //内置资源本身已是压缩格式（xz / zip），再被 APK 压一遍纯属浪费时间，
++        //而且几乎压不动（实测 433MB -> 419MB）。这里全部改为直接存储。
++        noCompress += listOf("tar.xz", "mrpack")
++    }
++
+     compileOptions {
+         // sora-editor language-textmate
+         isCoreLibraryDesugaringEnabled = true

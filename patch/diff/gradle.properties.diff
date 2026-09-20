@@ -1,0 +1,13 @@
+--- a/ZalithLauncher/gradle.properties
++++ b/ZalithLauncher/gradle.properties
+@@ -1,7 +1,7 @@
+ # launcher name & url
+-launcher_name=ZalithLauncher
+-launcher_app_name=Zalith Launcher
+-launcher_short_name=ZL2
++launcher_name=BundlePack
++launcher_app_name=BundlePack
++launcher_short_name=BPL
+ url_home=https://github.com/ZalithLauncher/ZalithLauncher2
+ 
+ # your OAuth client id

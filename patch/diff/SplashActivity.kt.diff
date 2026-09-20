@@ -1,0 +1,70 @@
+--- a/ZalithLauncher/src/main/java/com/movtery/zalithlauncher/ui/activities/SplashActivity.kt
++++ b/ZalithLauncher/src/main/java/com/movtery/zalithlauncher/ui/activities/SplashActivity.kt
+@@ -38,6 +38,7 @@
+ import com.movtery.zalithlauncher.components.jre.Jre
+ import com.movtery.zalithlauncher.components.jre.UnpackJnaTask
+ import com.movtery.zalithlauncher.components.jre.UnpackJreTask
++import com.movtery.zalithlauncher.game.download.modpack.autoinstall.BuiltinModpack
+ import com.movtery.zalithlauncher.setting.AllSettings
+ import com.movtery.zalithlauncher.ui.base.BaseAppCompatActivity
+ import com.movtery.zalithlauncher.ui.screens.splash.SplashScreen
+@@ -57,6 +58,8 @@
+ const val EXTRA_IMPORT_ACTION = "EXTRA_IMPORT_ACTION"
+ const val EXTRA_IMPORT_URI    = "EXTRA_IMPORT_URI"
+ const val EXTRA_IMPORT_TYPE   = "EXTRA_IMPORT_TYPE"
++/** 首次启动自动安装内置整合包的标记 */
++const val EXTRA_BUILTIN_MODPACK = "EXTRA_BUILTIN_MODPACK"
+ 
+ const val IMPORT_TYPE_MODPACK = "modpack"
+ const val IMPORT_TYPE_CONTROLS = "controls"
+@@ -233,8 +236,48 @@
+ 
+         if (import != null && handleImportIntent(import)) {
+             finish()
+-        } else {
+-            swapToMain()
++            return
++        }
++
++        // 首次启动自动安装内置整合包
++        if (handleBuiltinModpack()) {
++            return
++        }
++
++        swapToMain()
++    }
++
++    /**
++     * 首次启动时自动安装随 APK 内置的整合包。
++     *
++     * 仅在没有通过外部 Intent 导入、且从未自动安装过时触发。
++     * @return true 表示已接管流程（已跳转到 MainActivity 执行安装）
++     */
++    private fun handleBuiltinModpack(): Boolean {
++        // 用户主动通过外部 Intent 导入时，不抢占流程
++        if (isImportIntent(intent) && !isLauncherIntent(intent)) return false
++
++        return try {
++            if (BuiltinModpack.isInstalled(this)) {
++                Logger.info(TAG, "内置整合包此前已安装，跳过自动安装")
++                false
++            } else if (!BuiltinModpack.exists(this)) {
++                Logger.info(TAG, "APK 内未打包内置整合包，跳过自动安装")
++                false
++            } else {
++                Logger.info(TAG, "检测到内置整合包，开始自动安装流程")
++
++                val forward = Intent(this, MainActivity::class.java).apply {
++                    flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or
++                            Intent.FLAG_ACTIVITY_SINGLE_TOP
++                    putExtra(EXTRA_BUILTIN_MODPACK, true)
++                }
++                startActivity(forward)
++                true
++            }
++        } catch (e: Exception) {
++            Logger.error(TAG, "启动内置整合包自动安装失败", e)
++            false
+         }
+     }
+ 

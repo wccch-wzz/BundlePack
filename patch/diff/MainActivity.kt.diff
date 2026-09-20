@@ -1,0 +1,101 @@
+--- a/ZalithLauncher/src/main/java/com/movtery/zalithlauncher/ui/activities/MainActivity.kt
++++ b/ZalithLauncher/src/main/java/com/movtery/zalithlauncher/ui/activities/MainActivity.kt
+@@ -86,6 +86,8 @@
+ import com.movtery.zalithlauncher.utils.file.shareFile
+ import com.movtery.zalithlauncher.utils.isChinese
+ import com.movtery.zalithlauncher.utils.logging.Logger
++import com.movtery.zalithlauncher.game.download.modpack.autoinstall.BuiltinAssets
++import com.movtery.zalithlauncher.game.download.modpack.autoinstall.BuiltinModpack
+ import com.movtery.zalithlauncher.utils.network.openLink
+ import com.movtery.zalithlauncher.utils.network.openLinkInternal
+ import com.movtery.zalithlauncher.utils.string.getMessageOrToString
+@@ -796,6 +798,12 @@
+     private fun handleImportIfNeeded(intent: Intent?): Boolean {
+         if (intent == null) return false
+ 
++        // 首次启动的内置整合包自动安装
++        if (intent.getBooleanExtra(EXTRA_BUILTIN_MODPACK, false)) {
++            intent.removeExtra(EXTRA_BUILTIN_MODPACK)
++            return handleBuiltinModpackImport()
++        }
++
+         val type = intent.getStringExtra(EXTRA_IMPORT_TYPE) ?: return false
+ 
+         val importing = when (type) {
+@@ -809,6 +817,76 @@
+     }
+ 
+     /**
++     * 释放并静默安装随 APK 内置的整合包。
++     *
++     * 安装过程完全自动：版本名使用预设值、不弹出用户确认对话框，
++     * 安装完成后写入标记文件，后续启动不再重复执行。
++     *
++     * @return 是否已触发导入
++     */
++    private fun handleBuiltinModpackImport(): Boolean {
++        if (BuiltinModpack.isInstalled(this)) {
++            Logger.info(TAG, "内置整合包已安装过，跳过")
++            return false
++        }
++        if (!BuiltinModpack.exists(this)) {
++            Logger.info(TAG, "未打包内置整合包，跳过")
++            return false
++        }
++        if (modpackImportViewModel.importOperation != ModpackImportOperation.None) {
++            Logger.info(TAG, "已有导入任务进行中，跳过内置整合包")
++            return false
++        }
++
++        lifecycleScope.launch {
++            keepScreen(true)
++
++            //先释放随包内置的原版游戏资源（client.jar / libraries / assets）
++            //释放完成后，安装流程校验到本地文件均有效，无需联网下载
++            if (BuiltinAssets.exists(this@MainActivity)) {
++                Logger.info(TAG, "发现内置游戏资源，开始释放")
++                val released = BuiltinAssets.release(this@MainActivity)
++                Logger.info(TAG, "内置游戏资源释放结果: $released")
++            }
++
++            val file = BuiltinModpack.release(this@MainActivity)
++            if (file == null) {
++                Logger.error(TAG, "释放内置整合包失败，取消自动安装", null)
++                keepScreen(false)
++                return@launch
++            }
++
++            Logger.info(TAG, "开始静默安装内置整合包: ${file.absolutePath}")
++
++            modpackImportViewModel.import(
++                context = this@MainActivity,
++                uri = BuiltinModpack.uriOf(file),
++                silent = true,
++                defaultVersionName = BuiltinModpack.PACK_DISPLAY_NAME,
++                onStart = {
++                    Logger.info(TAG, "内置整合包安装任务已启动")
++                },
++                onStop = {
++                    lifecycleScope.launch {
++                        keepScreen(false)
++                    }
++                    Logger.info(
++                        TAG,
++                        "内置整合包安装流程结束，状态=${modpackImportViewModel.importOperation}"
++                    )
++                    // 安装成功后落下标记，避免每次启动无限重试
++                    if (modpackImportViewModel.importOperation is ModpackImportOperation.Finished) {
++                        BuiltinModpack.markInstalled(this@MainActivity)
++                        // 整合包内容已解压进游戏目录，释放出来的 .mrpack 可以删了（约 454MB）
++                        BuiltinModpack.cleanup(this@MainActivity)
++                    }
++                }
++            )
++        }
++        return true
++    }
++
++    /**
+      * @return 是否已经触发了整合包导入程序
+      */
+     private fun handleModpackImport(intent: Intent): Boolean {
