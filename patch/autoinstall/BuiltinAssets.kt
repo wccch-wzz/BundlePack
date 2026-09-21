@@ -102,6 +102,54 @@ object BuiltinAssets {
             .getOrNull()
     }
 
+    /**
+     * 内置加载器的版本信息
+     * @param loaderVersion 加载器版本号，如 0.19.3
+     * @param gameVersion 对应的游戏版本，如 1.21.11
+     * @param jsonName 版本 Json 文件名
+     */
+    data class BuiltinLoader(
+        val loaderVersion: String,
+        val gameVersion: String,
+        val jsonName: String
+    )
+
+    /**
+     * 列出内置加载器信息
+     *
+     * 供加载器解析流程在联网获取版本列表失败时兜底使用。整合包清单里其实
+     * 已经写明了加载器版本（例如 fabric-loader = 0.19.3），只要这个版本与
+     * 内置资源一致，就完全没有必要再去联网查一次版本列表 —— 联网那一步
+     * 恰恰是离线环境下最容易失败、且失败后表现为「装成纯原版」的环节。
+     */
+    fun builtinLoaders(gameHome: String = getGameHome()): List<BuiltinLoader> {
+        return BUILTIN_LOADER_JSONS.mapNotNull { jsonName ->
+            val plain = jsonName.removeSuffix(".json")
+            //命名规则固定为 <loader>-<loaderVersion>-<gameVersion>
+            val parts = plain.split("-")
+            if (parts.size < 4) {
+                Logger.warning(TAG, "内置加载器 Json 命名不符合预期: $jsonName")
+                return@mapNotNull null
+            }
+            val gameVersion = parts.last()
+            val loaderVersion = parts[parts.size - 2]
+            BuiltinLoader(
+                loaderVersion = loaderVersion,
+                gameVersion = gameVersion,
+                jsonName = jsonName
+            )
+        }
+    }
+
+    /**
+     * 按版本号查找内置加载器
+     * @param loaderVersion 期望的加载器版本
+     * @return 命中的内置加载器；未内置该版本时返回 null
+     */
+    fun findBuiltinLoader(loaderVersion: String, gameHome: String = getGameHome()): BuiltinLoader? {
+        return builtinLoaders(gameHome).firstOrNull { it.loaderVersion == loaderVersion }
+    }
+
 
     /**
      * 检查 assets 中是否随包提供了游戏资源
