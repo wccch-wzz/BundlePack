@@ -44,6 +44,14 @@ object BuiltinModpack {
     const val PACK_DISPLAY_NAME = "1.21.11-Fabric 0.19.2"
 
     /**
+     * 内置资源里 Fabric 版本目录名
+     *
+     * 必须与 builtin_mc.tar.xz 内的目录名、以及整合包清单声明的加载器版本一致，
+     * 否则直装时会找不到版本 Json。
+     */
+    const val FABRIC_VERSION_DIR = "fabric-loader-0.19.3-1.21.11"
+
+    /**
      * 安装标记文件名，用于判断是否已经自动安装过
      */
     private const val MARKER_NAME = ".builtin_modpack_installed"
