@@ -33,12 +33,17 @@ private const val TAG = "BuiltinAssets"
  * ```
  * versions/1.21.11/1.21.11.jar
  * versions/1.21.11/1.21.11.json
- * libraries/...
+ * versions/fabric-loader-0.19.3-1.21.11/fabric-loader-0.19.3-1.21.11.json
+ * libraries/...   （含原版库与 Fabric 加载器所需的 8 个库）
  * assets/indexes/...
  * assets/objects/...
  * ```
  * 首次启动时整体解包到用户选择的游戏目录，此后安装流程校验到本地文件
  * 均已存在且校验通过，无需联网下载。
+ *
+ * 关于 Fabric：内置的加载器 Json 与加载器库是「离线装出 Fabric 端」的关键。
+ * 只内置原版是不够的 —— 安装流程必须拿到加载器 Json 才能确定 mainClass 与
+ * 额外依赖，缺少它就会退化成纯原版。
  */
 object BuiltinAssets {
 
@@ -52,15 +57,51 @@ object BuiltinAssets {
     private const val ASSET_INDEX_NAME = "29"
 
     /**
-     * 释放标记文件，带上版本号，便于换包后重新释放
+     * 随包内置的模组加载器版本 Json 文件名
+     *
+     * 与 [VERSION_NAME] 一起参与标记文件命名：只要其中任意一个变化，
+     * 老用户升级 APP 后就会重新解包，避免「旧包不包含加载器资源」的问题。
      */
-    private fun markerFile(gameHome: String): File =
-        File(gameHome, ".builtin_mc_$VERSION_NAME")
+    private val BUILTIN_LOADER_JSONS = listOf("fabric-loader-0.19.3-1.21.11.json")
+
+    /**
+     * 释放标记文件，带上版本号与加载器版本，便于换包后重新释放
+     */
+    private fun markerFile(gameHome: String): File {
+        val loaderTag = BUILTIN_LOADER_JSONS.joinToString("_") { it.removeSuffix(".json") }
+        return File(gameHome, ".builtin_mc_${VERSION_NAME}_$loaderTag")
+    }
 
     /**
      * 是否已经释放过
      */
     fun isReleased(gameHome: String = getGameHome()): Boolean = markerFile(gameHome).exists()
+
+    /**
+     * 读取内置的模组加载器版本 Json
+     *
+     * 供加载器安装流程在离线场景下取用，避免再去联网拉取那份只有几 KB
+     * 但却是整个离线流程唯一硬依赖的 Json。
+     *
+     * @param fileName 期望的 Json 文件名（例如 fabric-loader-0.19.3-1.21.11.json）
+     * @return 文件内容；内置资源中没有对应文件时返回 null
+     */
+    fun findLocalLoaderJson(
+        fileName: String,
+        gameHome: String = getGameHome()
+    ): String? {
+        if (fileName !in BUILTIN_LOADER_JSONS) return null
+        val plain = fileName.removeSuffix(".json")
+        val file = File(getVersionsHome(gameHome), "$plain/$fileName")
+        if (!file.isFile) {
+            Logger.warning(TAG, "内置加载器 Json 不存在: ${file.absolutePath}")
+            return null
+        }
+        return runCatching { file.readText() }
+            .onFailure { Logger.error(TAG, "读取内置加载器 Json 失败: ${file.absolutePath}", it) }
+            .getOrNull()
+    }
+
 
     /**
      * 检查 assets 中是否随包提供了游戏资源
@@ -105,12 +146,20 @@ object BuiltinAssets {
         }
 
         //校验关键文件是否就位
-        val criticalFiles = listOf(
-            File(getVersionsHome(gameHome), "$VERSION_NAME/$VERSION_NAME.jar"),
-            File(getVersionsHome(gameHome), "$VERSION_NAME/$VERSION_NAME.json"),
-            File(getLibrariesHome(gameHome)),
-            File(getAssetsHome(gameHome), "indexes/$ASSET_INDEX_NAME.json")
-        )
+        //
+        //注意这里必须把加载器的 Json 也列为关键文件：它是离线装出 Fabric 端的
+        //必要条件，如果解包后缺失，会导致安装退化成纯原版，且现象很隐蔽
+        //（安装流程照常跑完，只是加载器没装上）。宁可在这里失败暴露问题。
+        val criticalFiles = buildList {
+            add(File(getVersionsHome(gameHome), "$VERSION_NAME/$VERSION_NAME.jar"))
+            add(File(getVersionsHome(gameHome), "$VERSION_NAME/$VERSION_NAME.json"))
+            add(File(getLibrariesHome(gameHome)))
+            add(File(getAssetsHome(gameHome), "indexes/$ASSET_INDEX_NAME.json"))
+            BUILTIN_LOADER_JSONS.forEach { jsonName ->
+                val plain = jsonName.removeSuffix(".json")
+                add(File(getVersionsHome(gameHome), "$plain/$jsonName"))
+            }
+        }
         val missing = criticalFiles.filterNot { it.exists() }
         if (missing.isNotEmpty()) {
             Logger.error(
@@ -122,7 +171,13 @@ object BuiltinAssets {
         }
 
         marker.parentFile?.mkdirs()
-        marker.writeText("released at ${System.currentTimeMillis()}\nversion=$VERSION_NAME\n")
+        marker.writeText(
+            buildString {
+                appendLine("released at ${System.currentTimeMillis()}")
+                appendLine("version=$VERSION_NAME")
+                appendLine("loaders=${BUILTIN_LOADER_JSONS.joinToString(",")}")
+            }
+        )
         Logger.info(TAG, "内置游戏资源解包完成")
         true
     }
