@@ -88,7 +88,6 @@ import com.movtery.zalithlauncher.utils.isChinese
 import com.movtery.zalithlauncher.utils.logging.Logger
 import com.movtery.zalithlauncher.game.download.modpack.autoinstall.BuiltinAssets
 import com.movtery.zalithlauncher.game.download.modpack.autoinstall.BuiltinDirectInstaller
-import com.movtery.zalithlauncher.game.download.modpack.autoinstall.BuiltinModpack
 import com.movtery.zalithlauncher.utils.network.openLink
 import com.movtery.zalithlauncher.utils.network.openLinkInternal
 import com.movtery.zalithlauncher.utils.string.getMessageOrToString
@@ -826,11 +825,11 @@ class MainActivity : BaseAppCompatActivity() {
      * @return 是否已触发导入
      */
     private fun handleBuiltinModpackImport(): Boolean {
-        if (BuiltinModpack.isInstalled(this)) {
-            Logger.info(TAG, "内置整合包已安装过，跳过")
+        if (BuiltinDirectInstaller.isInstalled()) {
+            Logger.info(TAG, "内置整合包已就位，无需兜底")
             return false
         }
-        if (!BuiltinModpack.exists(this)) {
+        if (!BuiltinDirectInstaller.shouldInstall(this)) {
             Logger.info(TAG, "未打包内置整合包，跳过")
             return false
         }
@@ -843,28 +842,24 @@ class MainActivity : BaseAppCompatActivity() {
         lifecycleScope.launch {
             keepScreen(true)
 
-            //走直装：把内置资源直接铺进游戏目录
+            //正常情况下，内置整合包已在启动画面由 UnpackBuiltinModpackTask
+            //解压到位，这里不需要做任何事。
             //
-            //为什么不用原来的「下载式安装」：那条链路第一件事就是联网下载原版
-            //（核对 Mojang 版本清单 / 资源索引），无网或网络不稳时整条任务流会中断，
-            //Fabric 版本目录压根不会被创建，表现就是「打开之后还是原版」且不报错。
-            //而内置资源本来就是完整的，不需要安装，只需要摆放。
-            Logger.info(TAG, "开始直装内置整合包")
+            //走到这里说明启动画面那条路没成（例如解压项被判定为 NOT_EXISTS 而跳过），
+            //用直装器兜一次底，避免用户拿到一个空游戏目录。
+            Logger.info(TAG, "启动画面未完成内置整合包解压，此处兜底安装")
             val ok = BuiltinDirectInstaller.install(
                 context = this@MainActivity,
                 onProgress = { stage, progress ->
-                    Logger.debug(TAG, "直装进度: $stage ${(progress * 100).toInt()}%")
+                    Logger.debug(TAG, "兜底安装进度: $stage ${(progress * 100).toInt()}%")
                 }
             )
             keepScreen(false)
 
             if (ok) {
-                Logger.info(TAG, "内置整合包直装成功")
-                //同步落下原安装流程的标记，避免别的入口再触发一次「下载式安装」
-                BuiltinModpack.markInstalled(this@MainActivity)
-                BuiltinModpack.cleanup(this@MainActivity)
+                Logger.info(TAG, "内置整合包兜底安装成功")
             } else {
-                Logger.error(TAG, "内置整合包直装失败", null)
+                Logger.error(TAG, "内置整合包兜底安装失败", null)
             }
         }
         return true

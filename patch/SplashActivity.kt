@@ -39,9 +39,7 @@ import com.movtery.zalithlauncher.components.jre.Jre
 import com.movtery.zalithlauncher.components.jre.UnpackJnaTask
 import com.movtery.zalithlauncher.components.jre.UnpackJreTask
 import com.movtery.zalithlauncher.game.download.modpack.autoinstall.BuiltinDirectInstaller
-import com.movtery.zalithlauncher.game.download.modpack.autoinstall.BuiltinModpack
 import com.movtery.zalithlauncher.game.download.modpack.autoinstall.UnpackBuiltinModpackTask
-import com.movtery.zalithlauncher.game.path.getGameHome
 import com.movtery.zalithlauncher.setting.AllSettings
 import com.movtery.zalithlauncher.ui.base.BaseAppCompatActivity
 import com.movtery.zalithlauncher.ui.screens.splash.SplashScreen
@@ -269,10 +267,11 @@ class SplashActivity : BaseAppCompatActivity() {
      * 首次启动时自动安装随 APK 内置的整合包。
      *
      * 注意：内置整合包现在已经在启动画面由 [UnpackBuiltinModpackTask] 铺好了，
-     * 正常情况下这里不再需要做事，[BuiltinModpack.isInstalled] 会返回 true。
+     * 正常情况下这里不再需要做事。
      *
-     * 保留这段逻辑是为了兜底：若解压项因故未被加入列表（例如 checkState 拿到
-     * NOT_EXISTS 而跳过），仍然能退回旧的「跳转主界面安装」流程。
+     * 保留这段逻辑是为了兜底：若解压项因故未被加入列表
+     * （例如 assets 布局不符导致 checkState 拿到 NOT_EXISTS 而跳过），
+     * 仍然能退回「跳转主界面安装」流程。
      *
      * @return true 表示已接管流程（已跳转到 MainActivity 执行安装）
      */
@@ -281,13 +280,10 @@ class SplashActivity : BaseAppCompatActivity() {
         if (isImportIntent(intent) && !isLauncherIntent(intent)) return false
 
         return try {
-            if (BuiltinDirectInstaller.isInstalled(getGameHome())) {
+            if (BuiltinDirectInstaller.isInstalled()) {
                 Logger.info(TAG, "内置整合包已在启动画面解压完成，无需再次安装")
                 false
-            } else if (BuiltinModpack.isInstalled(this)) {
-                Logger.info(TAG, "内置整合包此前已安装，跳过自动安装")
-                false
-            } else if (!BuiltinModpack.exists(this)) {
+            } else if (!BuiltinDirectInstaller.shouldInstall(this)) {
                 Logger.info(TAG, "APK 内未打包内置整合包，跳过自动安装")
                 false
             } else {
