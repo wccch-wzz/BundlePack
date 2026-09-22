@@ -3,8 +3,8 @@
  *
  * 本文件为第三方修改版新增功能。
  *
- * 与原有的「下载式安装」不同，这里不解析整合包清单、不联网下载任何东西，
- * 而是把随包内置的两份 tar.xz 直接铺到游戏目录，再做一次版本登记。
+ * 与原有的「下载式安装」不同，这里不解析整合包清单、不联网核对原版，
+ * 而是把随包内置的 tar.xz 直接铺到游戏目录，再做一次版本登记。
  *
  * 为什么需要它：
  *   原有安装链路（ModpackImporter -> GameInstaller）第一步就是「下载安装原版」，
@@ -12,8 +12,8 @@
  *   导致整条任务流中断，最终 Fabric 版本目录压根不会被创建 ——
  *   表现就是「打开之后还是原版」，而且不报错。
  *
- *   而内置资源本来就是完整的（原版 jar/json、Fabric loader profile、115 个库、
- *   55 个 mod），什么都不缺，根本不需要「安装」，只需要「摆放」。
+ *   而内置资源本来就是完整的（原版 jar/json、Fabric loader profile、115 个库），
+ *   根本不需要「安装」，只需要「摆放」。
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -149,10 +149,20 @@ object BuiltinDirectInstaller {
                 return@withContext false
             }
 
+            // ── 第二步补充：把 Fabric 的客户端 jar 放进版本目录 ────────────
+            //严格来说这个文件不会被启动流程读取：
+            //json 里有 inheritsFrom，GameLauncher 走的是
+            //getInheritedClientJar()，即 versions/1.21.11/1.21.11.jar。
+            //但把它放进来有两个好处：
+            //  1) 万一哪天 inheritsFrom 被去掉，getClientJar() 仍有东西可用
+            //  2) 版本目录在文件管理器里看起来是完整的，便于排查
+            //没有内置 jar 时静默跳过，不影响安装。
+            ensureVersionJar(version, root)
+
             // ── 第三步：铺整合包内容（mods / 配置 / 资源包等）──────────────
             //mrpack 内的 overrides/ 就是要覆盖进游戏目录的内容。
             //注意：版本隔离已开启，游戏实际目录就是 versions/山之城/，
-            //所以 mods 要放进 versions/山之城/mods/ 而不是游戏根目录。
+            //所以这些内容要放进 versions/山之城/ 而不是游戏根目录。
             onProgress?.invoke("正在释放整合包内容", 0.8f)
             val releasedPack = releasedPackFile(context)
             if (releasedPack == null) {
@@ -164,6 +174,10 @@ object BuiltinDirectInstaller {
             }
 
             // ── 第四步：写入版本配置（开启隔离）──────────────────────────
+            //渲染器不在这里写死。
+            //MobileGlues 是外部插件，安装与否、包名是否变化都不确定，
+            //因此改由 MobileGluesGuard 在每次启动前强制校验并自动纠正，
+            //这样即使插件后装、被卸载或换包名，也能正确跟随。
             onProgress?.invoke("正在写入版本配置", 0.99f)
             VersionConfig.createIsolation(version).apply {
                 versionSummary = "山之城 - 开箱即用整合包"
@@ -184,6 +198,36 @@ object BuiltinDirectInstaller {
         } catch (e: Exception) {
             Logger.error(TAG, "内置整合包直装失败", e)
             false
+        }
+    }
+
+    /**
+     * 确保版本目录下有一份客户端 jar
+     *
+     * 优先从继承的版本目录复制，其次用版本目录里已有的同名 jar。
+     */
+    private fun ensureVersionJar(version: File, gameHome: File) {
+        val target = File(version, "$VERSION_NAME.jar")
+        if (target.isFile && target.length() > 0) return
+
+        val candidates = listOf(
+            //继承目标：versions/1.21.11/1.21.11.jar
+            File(File(gameHome, "versions/1.21.11"), "1.21.11.jar"),
+            //内置 Fabric 版本目录里如果有，也认
+            File(File(gameHome, "versions/${BuiltinModpack.FABRIC_VERSION_DIR}"), "$VERSION_NAME.jar")
+        )
+
+        val source = candidates.firstOrNull { it.isFile && it.length() > 0 }
+        if (source == null) {
+            Logger.warning(TAG, "本地没有可用的客户端 jar，跳过版本 jar 的铺设")
+            return
+        }
+
+        runCatching {
+            source.copyTo(target, overwrite = true)
+            Logger.info(TAG, "已铺设版本 jar: ${target.name} (${target.length()} 字节)")
+        }.onFailure {
+            Logger.warning(TAG, "铺设版本 jar 失败: ${it.message}")
         }
     }
 
