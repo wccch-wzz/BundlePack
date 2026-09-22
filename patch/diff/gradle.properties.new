@@ -1,19 +1,39 @@
-# launcher name & url
-launcher_name=山之城
-launcher_app_name=山之城
-launcher_short_name=山之城
-url_home=https://github.com/ZalithLauncher/ZalithLauncher2
-
-# your OAuth client id
-#oauth_client_id=xxx
-
-# your CurseForge API key
-#curseforge_api_key=xxx
-
-# default key, please add it yourself.
-default_store_password=vh#nn%N(#eNjwfA78-77s6&f-cdd(@-7eana-e%!nhj%))!@c
-default_key_password=sfv72ghSSNQaadf99-Q69!2
-
-# launcher version
-launcher_version_code=200040
-launcher_version_name=2.5.3
+# Project-wide Gradle settings.
+# IDE (e.g. Android Studio) users:
+# Gradle settings configured through the IDE *will override*
+# any settings specified in this file.
+# For more details on how to configure your build environment visit
+# http://www.gradle.org/docs/current/userguide/build_environment.html
+# Specifies the JVM arguments used for the daemon process.
+# The setting is particularly useful for tweaking memory settings.
+org.gradle.jvmargs=-Xmx2200m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8
+# When configured, Gradle will run in incubating parallel mode.
+# This option should only be used with decoupled projects. For more details, visit
+# https://developer.android.com/r/tools/gradle-multi-project-decoupled-projects
+# org.gradle.parallel=true
+# AndroidX package structure to make it clearer which packages are bundled with the
+# Android operating system, and which are packaged with your app's APK
+# https://developer.android.com/topic/libraries/support-library/androidx-rn
+android.useAndroidX=true
+# Kotlin code style for this project: "official" or "obsolete":
+kotlin.code.style=official
+# Enables namespacing of each library's R class so that its R class includes only the
+# resources declared in the library itself and none from the library's dependencies,
+# thereby reducing the size of the R class for that library
+android.nonTransitiveRClass=true
+android.uniquePackageNames=false
+android.r8.strictFullModeForKeepRules=false
+android.suppressUnsupportedCompileSdk=37.2
+org.gradle.daemon=true
+org.gradle.parallel=false
+org.gradle.caching=true
+# 容器构建适配（不影响产物，仅影响构建能否跑完）：
+# 1) 容器 cgroup 内存上限 8G（可用 cat /sys/fs/cgroup/memory.max 确认），
+#    堆不能给大，否则 dex 阶段会被 OOM Killer 杀掉，表现为
+#    "Gradle build daemon disappeared unexpectedly"。
+# 2) workers 限 2，避免多线程同时申请内存叠加超限。
+# 3) 构建命令必须带 --offline：settings.gradle.kts 里的 google() /
+#    mavenCentral() 在受限网络下连接可达但零数据，会卡几十分钟。
+android.dexingType=default
+org.gradle.workers.max=2
+kotlin.daemon.jvmargs=-Xmx1024m -XX:MaxMetaspaceSize=256m
