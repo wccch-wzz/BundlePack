@@ -525,9 +525,13 @@ class VMActivity : BaseAppCompatActivity(), SurfaceTextureListener, SurfaceHolde
                 //版式与 Vulkan 检测弹窗一致，只有一个「安装」按钮
                 if (vmViewModel.showMobileGluesDialog) {
                     MobileGluesMissingDialog(
-                        onInstall = {
+                        onNetdisk = {
                             vmViewModel.showMobileGluesDialog = false
-                            MobileGluesGuard.startInstall(this@VMActivity)
+                            MobileGluesGuard.openNetdisk(this@VMActivity)
+                        },
+                        onQqGroup = {
+                            vmViewModel.showMobileGluesDialog = false
+                            MobileGluesGuard.openQqGroup(this@VMActivity)
                         }
                     )
                 }

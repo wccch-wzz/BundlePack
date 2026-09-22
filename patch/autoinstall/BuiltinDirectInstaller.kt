@@ -115,6 +115,12 @@ object BuiltinDirectInstaller {
             // ── 第二步：把版本别名指向内置的 Fabric 版本 ──────────────────
             //游戏本体里已经带了 versions/fabric-loader-0.19.3-1.21.11/，
             //但用户看到的名字应该是「山之城」，所以复制一份到 versions/山之城/。
+            //
+            //目标结构（版本隔离开启后，这里就是游戏实际目录）：
+            //  versions/山之城/
+            //    ├── 山之城.json
+            //    ├── 山之城.jar
+            //    └── mods/
             onProgress?.invoke("正在配置 Fabric 版本", 0.72f)
             val builtinFabric = File(root, "versions/${BuiltinModpack.FABRIC_VERSION_DIR}")
             if (!builtinFabric.isDirectory) {
@@ -149,28 +155,23 @@ object BuiltinDirectInstaller {
                 return@withContext false
             }
 
-            // ── 第二步补充：把 Fabric 的客户端 jar 放进版本目录 ────────────
-            //严格来说这个文件不会被启动流程读取：
-            //json 里有 inheritsFrom，GameLauncher 走的是
-            //getInheritedClientJar()，即 versions/1.21.11/1.21.11.jar。
-            //但把它放进来有两个好处：
-            //  1) 万一哪天 inheritsFrom 被去掉，getClientJar() 仍有东西可用
-            //  2) 版本目录在文件管理器里看起来是完整的，便于排查
-            //没有内置 jar 时静默跳过，不影响安装。
-            ensureVersionJar(version, root)
-
-            // ── 第三步：铺整合包内容（mods / 配置 / 资源包等）──────────────
-            //mrpack 内的 overrides/ 就是要覆盖进游戏目录的内容。
-            //注意：版本隔离已开启，游戏实际目录就是 versions/山之城/，
-            //所以这些内容要放进 versions/山之城/ 而不是游戏根目录。
-            onProgress?.invoke("正在释放整合包内容", 0.8f)
+            // ── 第三步：铺版本目录下的 jar 与 mods ────────────────────────
+            onProgress?.invoke("正在释放整合包内容", 0.76f)
             val releasedPack = releasedPackFile(context)
             if (releasedPack == null) {
                 Logger.error(TAG, "未能取得内整合包文件", null)
                 return@withContext false
             }
+
+            //版本目录下的 jar
+            //说明：json 里有 inheritsFrom，启动实际读的是
+            //versions/1.21.11/1.21.11.jar（getInheritedClientJar）。
+            //这份是照用户要求铺的：目录结构完整，且 inheritsFrom 被去掉时能兜底。
+            ensureVersionJar(version, root)
+
+            //mods：从 mrpack 的 overrides/mods/ 拆出来，铺到 versions/山之城/mods/
             applyOverrides(releasedPack, version) { ratio ->
-                onProgress?.invoke("正在释放整合包内容", 0.8f + ratio * 0.18f)
+                onProgress?.invoke("正在释放整合包内容", 0.76f + ratio * 0.22f)
             }
 
             // ── 第四步：写入版本配置（开启隔离）──────────────────────────
@@ -189,6 +190,7 @@ object BuiltinDirectInstaller {
                     appendLine("installed at ${System.currentTimeMillis()}")
                     appendLine("version=$VERSION_NAME")
                     appendLine("source=${BuiltinModpack.FABRIC_VERSION_DIR}")
+                    appendLine("mods=${File(version, "mods").listFiles()?.count { it.name.endsWith(".jar") } ?: 0}")
                 }
             )
 

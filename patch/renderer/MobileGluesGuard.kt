@@ -6,7 +6,7 @@
  * 作用：在本版本启动之前，强制确认当前渲染器是 MobileGlues。
  *   - 是        → 什么都不做
  *   - 不是      → 自动切换为 MobileGlues
- *   - 没安装    → 弹窗提示，底下附一个「安装」按钮
+ *   - 没安装    → 弹窗提示，给出「网盘下载」与「QQ群文件」两个入口
  *
  * 为什么需要它：
  *   VersionConfig.renderer 默认是空字符串。GameLauncher 拿到空串会走
@@ -22,7 +22,9 @@
  *   插件协议     meta-data "fclPlugin" = true      （旧架构，不是 fclPlugin_V2）
  *   渲染器唯一标识 就是包名本身                      （RendererPlugin.getUniqueIdentifier() = packageName）
  *   版本范围     minMCVer=1.17, maxMCVer 为空=不限
- *   架构         arm64-v8a
+ *
+ * 注意：MobileGlues 是外部独立 App，其内核 .so 位于它自己的 nativeLibraryDir，
+ * 无法随本 APK 分发，必须由用户另行安装。因此这里只做「检测 + 引导下载」。
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,13 +38,11 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import androidx.core.content.FileProvider
 import com.movtery.zalithlauncher.game.plugin.renderer_v2.RendererV2PluginManager
 import com.movtery.zalithlauncher.game.version.installed.VersionConfig
 import com.movtery.zalithlauncher.utils.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.File
 
 private const val TAG = "MobileGluesGuard"
 
@@ -59,20 +59,31 @@ object MobileGluesGuard {
     const val PACKAGE_NAME = "com.fcl.plugin.mobileglues"
 
     /**
-     * 下载页地址
-     *
-     * TODO: 待用户提供具体链接后替换。
-     * 当前指向官方发布页，保证链接可用。
+     * 网盘下载地址
      */
-    const val DOWNLOAD_URL = "https://github.com/MobileGL-Dev/MobileGlues-release/releases"
+    const val NETDISK_URL = "https://1860524481.share.123pan.cn/123pan/wFN5vd-UxVfH"
 
     /**
-     * 插件在 assets 中的文件名（可选）
-     *
-     * 若随包放入了 MobileGlues 的 APK，检测不到时会尝试直接调起安装器；
-     * 没放则退化为打开下载页。
+     * QQ 群号
      */
-    const val ASSET_APK_NAME = "MobileGlues.apk"
+    const val QQ_GROUP = "1104854895"
+
+    /**
+     * QQ 群资料页 scheme
+     *
+     * 格式取自手机 QQ 的 scheme 约定。
+     * 手机上若装了 QQ 可直接跳到群资料页（群文件在右上角）。
+     */
+    const val QQ_GROUP_URL =
+        "mqqapi://card/show_pslcard?src_type=internal&version=1" +
+            "&uin=$QQ_GROUP&card_type=group&source=external"
+
+    /**
+     * 未安装 QQ 时的降级地址
+     *
+     * 用 qun.qq.com 的群主页，浏览器里能看到群信息与「打开QQ」入口。
+     */
+    const val QQ_WEB_URL = "https://qun.qq.com/"
 
     /**
      * 检查结果
@@ -147,78 +158,54 @@ object MobileGluesGuard {
     }
 
     /**
-     * assets 里是否随包放了 MobileGlues 的 APK
+     * 打开网盘下载页
      */
-    fun hasBundledApk(context: Context): Boolean = runCatching {
-        context.assets.open(ASSET_APK_NAME).close()
-        true
-    }.getOrDefault(false)
-
-    /**
-     * 发起安装
-     *
-     * 优先用随包的 APK 直接调起系统安装器；
-     * 没随包就打开下载页让用户自己下。
-     *
-     * 注意：从 Android 8 起，安装第三方 APK 需要用户在系统设置里
-     * 手动授予「安装未知应用」权限，App 无法绕过这一步。
-     * 因此调起安装器后，用户仍需要点一次确认。
-     */
-    fun startInstall(context: Context) {
-        if (hasBundledApk(context)) {
-            if (installBundledApk(context)) return
-            Logger.warning(TAG, "随包 APK 安装未能调起，改为打开下载页")
-        } else {
-            Logger.info(TAG, "未随包内置 MobileGlues APK，打开下载页")
-        }
-        openDownloadPage(context)
+    fun openNetdisk(context: Context) {
+        openUrl(context, NETDISK_URL, "网盘")
     }
 
     /**
-     * 把 assets 里的 MobileGlues.apk 释放到缓存目录并调起安装器
+     * 跳转到 QQ 群
      *
-     * @return 是否成功调起
+     * 优先用 scheme 直接唤起 QQ 并进入群资料页；
+     * 没装 QQ（或有 QQ 但 scheme 被拒）时退化为打开 qun.qq.com。
      */
-    private fun installBundledApk(context: Context): Boolean = runCatching {
-        val apk = File(context.cacheDir, ASSET_APK_NAME)
-        context.assets.open(ASSET_APK_NAME).use { input ->
-            apk.outputStream().use { output -> input.copyTo(output, 256 * 1024) }
-        }
+    fun openQqGroup(context: Context) {
+        val opened = runCatching {
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse(QQ_GROUP_URL)).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            )
+            true
+        }.onFailure { e ->
+            if (e is ActivityNotFoundException) {
+                Logger.info(TAG, "未安装 QQ，退化为打开群主页")
+            } else {
+                Logger.error(TAG, "跳转 QQ 群失败", e)
+            }
+        }.getOrDefault(false)
 
-        val uri = FileProvider.getUriForFile(
-            context,
-            //与 AndroidManifest 里 FileProvider 的 authorities 保持一致
-            "${context.packageName}.provider",
-            apk
-        )
-
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        if (!opened) {
+            openUrl(context, QQ_WEB_URL, "QQ群主页")
         }
-        context.startActivity(intent)
-        Logger.info(TAG, "已调起 MobileGlues 安装器: ${apk.absolutePath}")
-        true
-    }.onFailure { e ->
-        Logger.error(TAG, "调起随包 APK 安装失败", e)
-    }.getOrDefault(false)
+    }
 
     /**
-     * 打开下载页
+     * 通用外部链接打开
      */
-    fun openDownloadPage(context: Context) {
+    private fun openUrl(context: Context, url: String, label: String) {
         runCatching {
             context.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse(DOWNLOAD_URL)).apply {
+                Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
             )
         }.onFailure { e ->
             if (e is ActivityNotFoundException) {
-                Logger.error(TAG, "没有可用的浏览器打开 $DOWNLOAD_URL", e)
+                Logger.error(TAG, "没有可用的应用打开$label: $url", e)
             } else {
-                Logger.error(TAG, "打开下载页失败", e)
+                Logger.error(TAG, "打开${label}失败: $url", e)
             }
         }
     }

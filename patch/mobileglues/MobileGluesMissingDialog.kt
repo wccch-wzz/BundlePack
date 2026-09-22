@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -39,6 +40,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.movtery.zalithlauncher.game.renderer.MobileGluesGuard
 import com.movtery.zalithlauncher.ui.components.fadeEdge
 import com.movtery.zalithlauncher.ui.components.rememberDialogMaxHeight
 import com.movtery.zalithlauncher.ui.components.verticalScrollWithBar
@@ -48,11 +50,13 @@ import com.movtery.zalithlauncher.ui.theme.onCardColor
 /**
  * MobileGlues 渲染器缺少提示
  *
- * @param onInstall 点击「安装」按钮
+ * @param onNetdisk 点击「网盘下载」
+ * @param onQqGroup 点击「QQ群文件」
  */
 @Composable
 fun MobileGluesMissingDialog(
-    onInstall: () -> Unit,
+    onNetdisk: () -> Unit,
+    onQqGroup: () -> Unit,
 ) {
     Dialog(
         onDismissRequest = {},
@@ -110,17 +114,31 @@ fun MobileGluesMissingDialog(
                             text = "安装后回到启动器，会自动切换为它，不需要手动设置。",
                             style = MaterialTheme.typography.labelMedium
                         )
+                        Text(
+                            //用内层字符串模板引用常量，避免与 Compose 的作用域混淆
+                            text = "可以从网盘下载，也可以加 QQ 群 ${MobileGluesGuard.QQ_GROUP} 在群文件里获取。",
+                            style = MaterialTheme.typography.labelMedium
+                        )
                     }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
+                        horizontalArrangement = Arrangement.spacedBy(
+                            12.dp,
+                            Alignment.End
+                        )
                     ) {
+                        FilledTonalButton(
+                            modifier = Modifier.focusProperties { canFocus = false },
+                            onClick = onQqGroup
+                        ) {
+                            Text(text = "QQ群文件下载")
+                        }
                         Button(
                             modifier = Modifier.focusProperties { canFocus = false },
-                            onClick = onInstall
+                            onClick = onNetdisk
                         ) {
-                            Text(text = "安装")
+                            Text(text = "网盘下载")
                         }
                     }
                 }
