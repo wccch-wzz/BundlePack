@@ -1,0 +1,22 @@
+# launcher name & url
+# 注意：Gradle 按 ISO-8859-1 读取 .properties（Java Properties 规范），
+# 中文直接写会被双重编码，桌面显示乱码。
+# 必须用 \uXXXX 转义，此处 = 山之城
+launcher_name=ShanZhiCheng
+launcher_app_name=\u5c71\u4e4b\u57ce
+launcher_short_name=\u5c71\u4e4b\u57ce
+url_home=https://github.com/ZalithLauncher/ZalithLauncher2
+
+# your OAuth client id
+#oauth_client_id=xxx
+
+# your CurseForge API key
+#curseforge_api_key=xxx
+
+# default key, please add it yourself.
+default_store_password=vh#nn%N(#eNjwfA78-77s6&f-cdd(@-7eana-e%!nhj%))!@c
+default_key_password=sfv72ghSSNQaadf99-Q69!2
+
+# launcher version
+launcher_version_code=200040
+launcher_version_name=2.5.3
